@@ -1,0 +1,26 @@
+300124
+- Get the sub06run01, parcel it in cortical (7N400ROI) and subcortical regions
+- Plot the timeseries per ROI (start with subcort), and per network too
+- Match the metadata times of the different SNR sound onsets to the times in the fMRI run
+- Match the metadata times of the hears & not heard trials
+
+################################################################################
+# Work derived TODOs:
+
+- Check w/B that this is indeed the final anat anat_file
+anat_path = '/media/dragana.manasova/UNTITLED/Integration/Integration_data_preprocessed_denoised/2021_08_04_INTEGRATION_S06YM/S44_T1w'
+anat_name = 'wmv_INTEGRATION_S06YM_S44_T1w.nii'
+
+- Baseline correct the signals -4 to -1 sec before sound presentation
+
+################################################################################
+# Notes from papers etc 
+
+From Seltzer et al 2022
+- The scans should not be spatially smoothened
+- The segmentation should be in original subject space,
+and in the same space we can segment the thalamus
+- The fMRI signal was linearly interpolated to 4 times the sampling 
+in order to better match it with the arousal events
+- Arousal windows with more than 0.3mm framewise displacement are excluded
+- The signal was baseline corrected -10 to -7 sec before arousal
