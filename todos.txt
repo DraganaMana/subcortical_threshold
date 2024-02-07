@@ -11,16 +11,28 @@
 anat_path = '/media/dragana.manasova/UNTITLED/Integration/Integration_data_preprocessed_denoised/2021_08_04_INTEGRATION_S06YM/S44_T1w'
 anat_name = 'wmv_INTEGRATION_S06YM_S44_T1w.nii'
 
-- Baseline correct the signals -4 to -1 sec before sound presentation
+- I should use scans that don't have the heart and breathing regressed out ?
+Answer: No it's okay that they're regressed out
+
+- Also I should remove trials based on framewise displacement check
 
 ################################################################################
 # Notes from papers etc 
 
 From Seltzer et al 2022
-- The scans should not be spatially smoothened
+- The scans should not be spatially smoothened [they're not]
 - The segmentation should be in original subject space,
 and in the same space we can segment the thalamus
 - The fMRI signal was linearly interpolated to 4 times the sampling 
 in order to better match it with the arousal events
 - Arousal windows with more than 0.3mm framewise displacement are excluded
 - The signal was baseline corrected -10 to -7 sec before arousal
+
+
+Meeting with Bev : 
+- fSL or freesurfer combination of the masks left and right thalamus 
+ -- 
+ - look at the framewise displacement and the global signal changes and see how much the 
+ global signal changes with the framewise displacement 
+ - retroicor regression of the heart and breathing - based on the frequencies of the two signals
+ or HRAN to regress 
