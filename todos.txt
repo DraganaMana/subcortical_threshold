@@ -29,6 +29,15 @@ in order to better match it with the arousal events
 - The signal was baseline corrected -10 to -7 sec before arousal
 
 
+From Leaver et al., 2023 medRxiv
+Paper title: Focal transcranial direct current stimulation of auditory cortex in chronic tinnitus: A randomized
+controlled mechanistic trial
+- Areas from the Schaeffer400 atlas, 17 networks
+    - Left lobe : S44, S45, S49
+    - Right lobe : S244, S245, S249
+
+
+
 Meeting with Bev : 
 - fSL or freesurfer combination of the masks left and right thalamus 
  -- 

@@ -28,7 +28,8 @@ def remove_elements(elements_to_remove, roi_names, time_series):
 
 def get_parcellation(sub, sub_ses, anat_file, bold_file, atlas_name, 
                      base_path, plot_dir, 
-                     n_rois=100, resolution_mm=1, plot=False, save=True, 
+                     n_networks=7, n_rois=100, resolution_mm=1, 
+                     plot=False, save=True, 
                      filtered='filtered'):
     """
 
@@ -45,13 +46,13 @@ def get_parcellation(sub, sub_ses, anat_file, bold_file, atlas_name,
     if atlas_name == 'Schaefer2018':
         atlas = datasets.fetch_atlas_schaefer_2018(
                             n_rois=n_rois, 
-                            yeo_networks=7,
+                            yeo_networks=n_networks,
                             resolution_mm=resolution_mm)
 
         # Get coordinates from github
         url = 'https://raw.githubusercontent.com/ThomasYeoLab/CBIG/master/stable_projects/brain_parcellation/' \
                 'Schaefer2018_LocalGlobal/Parcellations/MNI/Centroid_coordinates/' \
-                'Schaefer2018_'+str(n_rois)+'Parcels_7Networks_order_FSLMNI152_1mm.Centroid_RAS.csv'
+                'Schaefer2018_'+str(n_rois)+'Parcels_'+str(n_networks)+'Networks_order_FSLMNI152_1mm.Centroid_RAS.csv'
         schaefer_coordinates = pd.read_csv(url)
         roi_coordinates = schaefer_coordinates[['R', 'A', 'S']].values.tolist() 
         # matching the format of the nilearn other maps
@@ -158,6 +159,7 @@ ts_end = 11
 
 all_time_series = []
 cort_all_time_series = []
+cort_all_separated_time_series = []
 
 for i in range(1,7):
     print(i)
@@ -173,12 +175,15 @@ for i in range(1,7):
                                                                     atlas_name='Schaefer2018', 
                                                                     base_path=derivatives_path, 
                                                                     plot_dir=derivatives_path, 
+                                                                    n_networks=17,
                                                                     n_rois=400, 
                                                                     resolution_mm=1, 
                                                                     plot=True, 
                                                                     save=False, 
                                                                     filtered=None # 'filtered'
                                                                     )
+    cort_roi_labels = [row.tobytes().decode('UTF-8') for row in cort_roi_labels]
+    
 
     subcort_roi_time_series, subcort_roi_labels, subcort_roi_coordinates = get_parcellation(sub='sub-06', 
                                                                     sub_ses=f'run-0{i}', 
@@ -273,13 +278,44 @@ for i in range(1,7):
 
             # Convert the list of selected time series into a matrix
             cort_selected_time_series_matrix = np.array(cort_selected_time_series)
-        
-        # cort_all_regions_time_series.append(cort_selected_time_series_matrix)
-
-        # cort_all_regions_time_series_matrix = np.array(cort_all_regions_time_series)
-
     cort_all_time_series.append(cort_selected_time_series_matrix) # 2 blocks len x x number of events
 
+    # In this case below it's also the cortical regions but separated
+    # So we get the signals separately per region
+
+    cort_all_regions_time_series = []
+
+    # Loop over each cortical region
+    for region_index, region_label in enumerate(cort_roi_labels):
+        print(f'Processing region {region_label}')
+
+        cort_selected_time_series = []
+
+        # Select the time series of the current region
+        region_time_series = cort_roi_time_series[:, region_index]
+
+        # Loop over each timepoint in df_run.volume_stim
+        for timepoint in df_run.volume_stim:
+            cut_region_time_series = region_time_series[timepoint+ts_start:timepoint+ts_end]
+            # There will be 7 points before the timepoint
+            if baseline_correction: 
+                # Compute the average of the first 6 points
+                baseline = np.mean(cut_region_time_series[:3]) # [:6] for the -7 to -1 points
+                # Subtract the baseline from the time series
+                cut_region_time_series = cut_region_time_series - baseline
+            cort_selected_time_series.append(cut_region_time_series)
+
+            # Convert the list of selected time series into a matrix
+            cort_selected_time_series_matrix = np.array(cort_selected_time_series)
+        
+        cort_all_regions_time_series.append(cort_selected_time_series_matrix)
+
+        cort_all_regions_time_series_matrix = np.array(cort_all_regions_time_series)
+
+    cort_all_separated_time_series.append(cort_all_regions_time_series_matrix) # 2 blocks len x x number of events
+
+    
+#%%
 """
 selected_time_series_matrix.shape = n_trials x n_times
 n_trials is variable = len(df_run.volume_stim)
@@ -295,6 +331,51 @@ len(all_time_series) = 6
 6 blocks
 
 """
+
+
+#%%
+# selected_indices = [43, 44, 48, 49, 243, 244, 248, 250]
+# selected_indices = [44, 45, 49, 50, 244, 245, 249, 251]
+# selected_labels = [cort_roi_labels[i] for i in selected_indices]
+# print(selected_labels)
+
+selected_indices = [i for i, label in enumerate(cort_roi_labels) if 'Aud' in label] # + [250] accordin to the paper in todos
+
+selected_labels = [cort_roi_labels[i] for i in selected_indices]
+# ['17Networks_LH_SomMotB_Aud_1',
+#  '17Networks_LH_SomMotB_Aud_2',
+#  '17Networks_LH_SomMotB_Aud_3',
+#  '17Networks_LH_SomMotB_Aud_4',
+#  '17Networks_RH_SomMotB_Aud_1',
+#  '17Networks_RH_SomMotB_Aud_2',
+#  '17Networks_RH_SomMotB_Aud_3']
+
+atlas = datasets.fetch_atlas_schaefer_2018(
+                    n_rois=400, 
+                    yeo_networks=17,
+                    resolution_mm=1)
+atlas_filename = atlas.maps
+
+
+# Load the atlas image
+atlas_img = nib.load(atlas_filename)
+
+# Get the atlas data
+atlas_data = atlas_img.get_fdata()
+
+# Create a mask that only includes the selected regions
+mask_data = np.isin(atlas_data, selected_indices)
+
+# Create a new Nifti image from the mask
+mask_img = nib.Nifti1Image(mask_data.astype(int), atlas_img.affine)
+
+# Plot the mask
+plotting.plot_roi(mask_img, bg_img=atlas_img, display_mode='ortho', cmap='Paired')
+
+# Get the timeseries only for the selected regions in selected_indices
+cort_all_separated_time_series_auditory = [elem[selected_indices, :, :] for elem in cort_all_separated_time_series if elem.ndim == 3 and elem.shape[0] >= max(selected_indices)+1]
+
+
 
 #%%
 # Save the a1ll_time_series
@@ -369,7 +450,13 @@ for i, (ax, roi_name) in enumerate(zip(axs, subcort_roi_labels)):
 
 plt.tight_layout()
 plt.show()
-# %%
+# %% All cortical regions together
+
+# There are 73 trials in sub06, 400 ROIs
+# so we have 73 x 400 = 29200 time series
+# and we average across all of them.
+
+# Another option is to average across the 400ROI, and then average again all trials
 
 # Create a figure with a single subplot
 fig, ax = plt.subplots(figsize=(5, 3))
@@ -409,4 +496,98 @@ ax.legend(loc='lower right')
 
 plt.tight_layout()
 plt.show()
+# %% Auditory cortical regions
+
+# Create a figure with multiple subplots
+fig, axs = plt.subplots(7, 1, figsize=(5, 10))
+
+# Generate x values starting from -7
+x_values = np.arange(ts_start, len(cort_all_separated_time_series_auditory[0][0]) + ts_start)
+
+# Loop over each label in selected_labels
+for i, (ax, roi_name) in enumerate(zip(axs, selected_labels)):
+    # Get the signal corresponding to the current label
+    roi_signal = [matrix[i] for matrix in cort_all_separated_time_series_auditory]
+
+    # Stack the signals along the second dimension
+    stacked_roi_signal = np.vstack(roi_signal)
+
+    # Compute the average of the stacked time series
+    average_roi_signal = np.mean(stacked_roi_signal, axis=0)
+
+    # Add a horizontal line at y=0
+    ax.axhline(y=0, color='gray', linestyle='--', linewidth=1)
+
+    # Plot the average signal with the new x values
+    ax.plot(x_values, average_roi_signal, linewidth=2, color='black', 
+            label=f'{roi_name}')
+
+    # Plot all the individual signals with the new x values
+    for signal in stacked_roi_signal:
+        ax.plot(x_values, signal, alpha=0.1)
+
+    # Set the x-ticks to start from ts_start
+    ax.set_xticks(x_values)
+
+    # Set the y-axis limits
+    ax.set_ylim(-1, 1)
+    # Set the y-ticks
+    ax.set_yticks([-1, -0.5, 0, 0.5, 1])
+
+    # Add a vertical dashed line at x=0
+    ax.axvline(x=0, color='violet', linestyle='--', linewidth=1)
+
+    ax.legend(loc='lower right')
+
+plt.tight_layout()
+plt.show()
+
+
+# %% Average auditory cortical regions
+
+fig, ax = plt.subplots(figsize=(5, 2))
+
+# Generate x values starting from -7
+x_values = np.arange(ts_start, len(cort_all_separated_time_series_auditory[0][0]) + ts_start)
+
+# Initialize an empty list to store all signals
+all_signals = []
+
+# Loop over each label in selected_labels
+for i, roi_name in enumerate(selected_labels):
+    # Get the signal corresponding to the current label
+    roi_signal = [matrix[i] for matrix in cort_all_separated_time_series_auditory]
+
+    # Stack the signals along the second dimension
+    stacked_roi_signal = np.vstack(roi_signal)
+
+    # Add the stacked signals to the list of all signals
+    all_signals.append(stacked_roi_signal)
+
+# Stack all signals along the first dimension
+all_signals_stacked = np.vstack(all_signals)
+
+average_signal = np.mean(all_signals_stacked, axis=0)
+
+ax.axhline(y=0, color='gray', linestyle='--', linewidth=1)
+
+ax.plot(x_values, average_signal, linewidth=2, color='black')
+
+ax.set_xticks(x_values)
+
+ax.set_ylim(-1, 1)
+ax.set_yticks([-1, -0.5, 0, 0.5, 1])
+
+ax.axvline(x=0, color='violet', linestyle='--', linewidth=1)
+
+ax.set_title('Average auditory cortical regions')
+
+ax.set_ylabel('Signal change [%]')
+ax.set_xlabel('Time [s] (0 = stimulus onset)')
+
+ax.fill_betweenx(ax.get_ylim(), -3, -1, color='lightgray', alpha=0.5)
+
+plt.tight_layout()
+plt.show()
+
 # %%
