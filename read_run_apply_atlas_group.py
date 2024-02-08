@@ -1,5 +1,6 @@
 #%% Imports
 import os
+import glob
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -139,18 +140,19 @@ def get_parcellation(sub, sub_ses, anat_file, bold_file, atlas_name,
 local_base_path = '/home/dragana.manasova/Documents/codes/subcortical_integration'
 derivatives_path = os.path.join(local_base_path, 'derivatives')
 
-sub_path = '/media/dragana.manasova/UNTITLED/Integration/Integration_data_preprocessed_denoised/2021_08_04_INTEGRATION_S06YM'
+group_path = '/media/dragana.manasova/UNTITLED/Integration/Integration_data_preprocessed_denoised'
 
-anat_path = f'{sub_path}/S44_T1w'
-anat_name = 'wmv_INTEGRATION_S06YM_S44_T1w.nii' #'mv_INTEGRATION_S06YM_S44_T1w.nii' # wmv_INTEGRATION_S06YM_S44_T1w.nii
-anat_file = f"{anat_path}/{anat_name}"
-
-# Read the metadata
-df = pd.read_csv('data/metadata_subject_S06YM.csv')
-df_run1 = df[(df['block'] == 1) & (df['SNR'] == 'SNR07')]
-df_run1 = df[(df['block'] == 1) & (df['status'] == 'HIT')]
-df_run1 = df[df['SNR'].isin(['SNR07', 'SNR09'])]
-df_sub6 = df[df['status'] == 'HIT']
+pax = [
+    'Pilote04', 'S01BJ', 'S02MC', 
+    # 'S03DM',  in the files the code is S03BM
+    'S04HF',
+    'S05VM', 'S06YM', 'S07BL', 'S08BM', 'S09GP',
+    'S10IY', 'S12SA', 'S13MA', 'S14AS', 'S15MM', 
+    'S16HJ', 'S17AT', 'S18VA', 'S19CA', 'S20MJ',  
+    'S21GA', 'S22SD', 
+    # 'S23CR', in the files the code is S23MR
+    'S24HT', 'S25GC', 
+    ]
 
 baseline_correction = True
 
@@ -161,171 +163,195 @@ all_time_series = []
 cort_all_time_series = []
 cort_all_separated_time_series = []
 
-for i in range(1,7):
-    print(i)
-    run_name = f'S{5*(i+2)}_INTEGRATION_run0{i}/denoised/denoised_run0{i}.nii'
-    print(f'run_name: {run_name}')
-    nii_path = f"{sub_path}/{run_name}"
-    img = nib.load(nii_path)
+for code in pax:
+    print(f'\nProcessing participant: {code}')
 
-    cort_roi_time_series, cort_roi_labels, cort_roi_coordinates = get_parcellation(sub='sub-06', 
-                                                                    sub_ses=f'run-0{i}', 
-                                                                    anat_file=anat_file, 
-                                                                    bold_file=nii_path, 
-                                                                    atlas_name='Schaefer2018', 
-                                                                    base_path=derivatives_path, 
-                                                                    plot_dir=derivatives_path, 
-                                                                    n_networks=17,
-                                                                    n_rois=400, 
-                                                                    resolution_mm=1, 
-                                                                    plot=True, 
-                                                                    save=False, 
-                                                                    filtered=None # 'filtered'
-                                                                    )
-    cort_roi_labels = [row.tobytes().decode('UTF-8') for row in cort_roi_labels]
-    
+    # Find the sub_path that contains the current code
+    sub_path = glob.glob(f'{group_path}/*{code}*')
+    # If there is more than one sub_path raise an error
+    if len(sub_path) > 1:
+        raise ValueError(f'More than one sub_path found for {code}')
+    elif len(sub_path) == 1:
+        sub_path = sub_path[0]
 
-    subcort_roi_time_series, subcort_roi_labels, subcort_roi_coordinates = get_parcellation(sub='sub-06', 
-                                                                    sub_ses=f'run-0{i}', 
-                                                                    anat_file=anat_file, 
-                                                                    bold_file=nii_path, 
-                                                                    atlas_name='HarvardOxfordSubcortical', 
-                                                                    base_path=derivatives_path, 
-                                                                    plot_dir=derivatives_path, 
-                                                                    plot=True, 
-                                                                    save=False, 
-                                                                    filtered=None # 'filtered'
-                                                                    )
-    
-    # Get the events from the metadata from the given run
-    df_run = df[(df['block'] == i) & (df['status'] == 'HIT')]
-    print(f'Number of events: {len(df_run.volume_stim)}')
+    # for sub_path in sub_paths:
+    # Find the folder that ends with T1w
+    anat_paths = glob.glob(f'{sub_path}/*T1w')
 
-    fig, axs = plt.subplots(len(subcort_roi_labels), 1, figsize=(20, 10))
-    for j, label in enumerate(subcort_roi_labels):
-        axs[j].plot(subcort_roi_time_series[:, j])
-        axs[j].set_title(f'Run {i}: {label}', pad=-150)
-        axs[j].set_ylabel('Signal')
-        # Plot vertical lines at the timepoints from df_run01.volume_stim
-        for timepoint in df_run.volume_stim:
-            axs[j].axvline(x=timepoint, color='r', linestyle='--')
-        if j < len(subcort_roi_labels) - 1:  # if not the last subplot
-            axs[j].set_xticklabels([])
-        else:
-            axs[j].set_xlabel('Time points')
-    plt.subplots_adjust(hspace=0.5)
-    plt.tight_layout()
-    plt.show()
+    for anat_path in anat_paths:
+        # Find the file that starts with 'wmv_', contains the code in the name, and ends with '_T1w.nii'
+        anat_file = glob.glob(f'{anat_path}/wmv_*{code}*_T1w.nii')
+        # If there is more than one anat_file raise an error
+        if len(anat_file) > 1:
+            raise ValueError(f'More than one file found for {code} in {anat_path}')
+        elif len(anat_file) == 1:
+            anat_file = anat_file[0]
 
-    all_regions_time_series = []
+        # Read the metadata
+        df = pd.read_csv(f'data/metadata_subject_{code}.csv')
 
-    # Loop over each subcortical region
-    for region_index, region_label in enumerate(subcort_roi_labels):
-        print(f'Processing region {region_label}')
 
-        # Initialize an empty list to store the selected time series
-        selected_time_series = []
+    for i in range(1,7):
 
-        # Select the time series of the current region
-        region_time_series = subcort_roi_time_series[:, region_index]
+        sub_run_folder_name = glob.glob(os.path.join(sub_path, f"*INTEGRATION_run0{i}"))
+        if len(sub_run_folder_name) > 1:
+            raise ValueError(f'More than one sub_run_folder_name found for {code} in {sub_path}')
+        elif len(sub_run_folder_name) == 1:
+            sub_run_folder_name = sub_run_folder_name[0]
 
-        # Loop over each timepoint in df_run1.volume_stim
-        for timepoint in df_run.volume_stim:
-            cut_region_time_series = region_time_series[timepoint+ts_start:timepoint+ts_end]
-            # There will be 7 points before the timepoint
-            if baseline_correction: 
-                # Compute the average of the first 6 points
-                baseline = np.mean(cut_region_time_series[:3]) # [:6] for the -7 to -1 points
-                # Subtract the baseline from the time series
-                cut_region_time_series = cut_region_time_series - baseline
-            selected_time_series.append(cut_region_time_series)
+        run_name = f'{sub_run_folder_name}/denoised/denoised_run0{i}.nii'
+        print(f'run_name: {run_name}')
 
-            # TODO temporary fix:
-            selected_time_series = [arr for arr in selected_time_series if len(arr) > 0]
-            selected_time_series_matrix = np.stack(selected_time_series)
+        nii_path = f"{run_name}"
+        img = nib.load(nii_path)
 
-            # Convert the list of selected time series into a matrix
-            # selected_time_series_matrix = np.array(selected_time_series)
+        cort_roi_time_series, cort_roi_labels, cort_roi_coordinates = get_parcellation(sub=code, 
+                                                                        sub_ses=f'run-0{i}', 
+                                                                        anat_file=anat_file, 
+                                                                        bold_file=nii_path, 
+                                                                        atlas_name='Schaefer2018', 
+                                                                        base_path=derivatives_path, 
+                                                                        plot_dir=derivatives_path, 
+                                                                        n_networks=17,
+                                                                        n_rois=400, 
+                                                                        resolution_mm=1, 
+                                                                        plot=True, 
+                                                                        save=False, 
+                                                                        filtered=None # 'filtered'
+                                                                        )
+        cort_roi_labels = [row.tobytes().decode('UTF-8') for row in cort_roi_labels]
         
-        all_regions_time_series.append(selected_time_series_matrix)
 
-        all_regions_time_series_matrix = np.array(all_regions_time_series)
+        subcort_roi_time_series, subcort_roi_labels, subcort_roi_coordinates = get_parcellation(sub=code, 
+                                                                        sub_ses=f'run-0{i}', 
+                                                                        anat_file=anat_file, 
+                                                                        bold_file=nii_path, 
+                                                                        atlas_name='HarvardOxfordSubcortical', 
+                                                                        base_path=derivatives_path, 
+                                                                        plot_dir=derivatives_path, 
+                                                                        plot=True, 
+                                                                        save=False, 
+                                                                        filtered=None # 'filtered'
+                                                                        )
+        
+        # Get the events from the metadata from the given run
+        df_run = df[(df['block'] == i) & (df['status'] == 'HIT')]
+        print(f'Number of events: {len(df_run.volume_stim)}')
 
-    all_time_series.append(all_regions_time_series_matrix) # 2 blocks len x x number of events 
-    
+        fig, axs = plt.subplots(len(subcort_roi_labels), 1, figsize=(20, 10))
+        for j, label in enumerate(subcort_roi_labels):
+            axs[j].plot(subcort_roi_time_series[:, j])
+            axs[j].set_title(f'Run {i}: {label}', pad=-150)
+            axs[j].set_ylabel('Signal')
+            # Plot vertical lines at the timepoints from df_run01.volume_stim
+            for timepoint in df_run.volume_stim:
+                axs[j].axvline(x=timepoint, color='r', linestyle='--')
+            if j < len(subcort_roi_labels) - 1:  # if not the last subplot
+                axs[j].set_xticklabels([])
+            else:
+                axs[j].set_xlabel('Time points')
+        plt.subplots_adjust(hspace=0.5)
+        plt.tight_layout()
+        plt.savefig(f'plots/sub-{code}_run-0{i}_subcortical_time_series.png')
+        plt.show()
+        plt.close()
 
-    ##### Cortical regions
-    # The difference with the subcortical code above is that
-    # I save it for all regions together, and then average them
+        all_regions_time_series = []
 
-    # cort_all_regions_time_series = []
-    # Initialize an empty list to store the selected time series
-    cort_selected_time_series = []
+        # Loop over each subcortical region
+        for region_index, region_label in enumerate(subcort_roi_labels):
+            print(f'Processing region {region_label}')
 
-    # Loop over each cortical region
-    for region_index, region_label in enumerate(cort_roi_labels):
-        print(f'Processing region {region_label}')
+            # Initialize an empty list to store the selected time series
+            selected_time_series = []
 
-        # Select the time series of the current region
-        region_time_series = cort_roi_time_series[:, region_index]
+            # Select the time series of the current region
+            region_time_series = subcort_roi_time_series[:, region_index]
 
-        # Loop over each timepoint in df_run.volume_stim
-        for timepoint in df_run.volume_stim:
-            cut_region_time_series = region_time_series[timepoint+ts_start:timepoint+ts_end]
-            # There will be 7 points before the timepoint
-            if baseline_correction: 
-                # Compute the average of the first 6 points
-                baseline = np.mean(cut_region_time_series[:3]) # [:6] for the -7 to -1 points
-                # Subtract the baseline from the time series
-                cut_region_time_series = cut_region_time_series - baseline
-            cort_selected_time_series.append(cut_region_time_series)
+            # Loop over each timepoint in df_run1.volume_stim
+            for timepoint in df_run.volume_stim:
+                cut_region_time_series = region_time_series[timepoint+ts_start:timepoint+ts_end]
+                # There will be 7 points before the timepoint
+                if baseline_correction: 
+                    # Compute the average of the first 6 points
+                    baseline = np.mean(cut_region_time_series[:3]) # [:6] for the -7 to -1 points
+                    # Subtract the baseline from the time series
+                    cut_region_time_series = cut_region_time_series - baseline
+                selected_time_series.append(cut_region_time_series)
 
-            # TODO temporary fix:
-            cort_selected_time_series = [arr for arr in cort_selected_time_series if len(arr) > 0]
-            cort_selected_time_series_matrix = np.stack(cort_selected_time_series)
+                # Convert the list of selected time series into a matrix
+                selected_time_series_matrix = np.array(selected_time_series)
+            
+            all_regions_time_series.append(selected_time_series_matrix)
 
-            # Convert the list of selected time series into a matrix
-            # cort_selected_time_series_matrix = np.array(cort_selected_time_series)
+            all_regions_time_series_matrix = np.array(all_regions_time_series)
 
-    cort_all_time_series.append(cort_selected_time_series_matrix) # 2 blocks len x x number of events
+        all_time_series.append(all_regions_time_series_matrix) # 2 blocks len x x number of events 
+        
 
-    # In this case below it's also the cortical regions but separated
-    # So we get the signals separately per region
+        ##### Cortical regions
+        # The difference with the subcortical code above is that
+        # I save it for all regions together, and then average them
 
-    cort_all_regions_time_series = []
-
-    # Loop over each cortical region
-    for region_index, region_label in enumerate(cort_roi_labels):
-        print(f'Processing region {region_label}')
-
+        # cort_all_regions_time_series = []
+        # Initialize an empty list to store the selected time series
         cort_selected_time_series = []
 
-        # Select the time series of the current region
-        region_time_series = cort_roi_time_series[:, region_index]
+        # Loop over each cortical region
+        for region_index, region_label in enumerate(cort_roi_labels):
+            print(f'Processing region {region_label}')
 
-        # Loop over each timepoint in df_run.volume_stim
-        for timepoint in df_run.volume_stim:
-            cut_region_time_series = region_time_series[timepoint+ts_start:timepoint+ts_end]
-            # There will be 7 points before the timepoint
-            if baseline_correction: 
-                # Compute the average of the first 6 points
-                baseline = np.mean(cut_region_time_series[:3]) # [:6] for the -7 to -1 points
-                # Subtract the baseline from the time series
-                cut_region_time_series = cut_region_time_series - baseline
-            cort_selected_time_series.append(cut_region_time_series)
+            # Select the time series of the current region
+            region_time_series = cort_roi_time_series[:, region_index]
 
-            # TODO temporary fix:
-            cort_selected_time_series = [arr for arr in cort_selected_time_series if len(arr) > 0]
-            cort_selected_time_series_matrix = np.stack(cort_selected_time_series)
+            # Loop over each timepoint in df_run.volume_stim
+            for timepoint in df_run.volume_stim:
+                cut_region_time_series = region_time_series[timepoint+ts_start:timepoint+ts_end]
+                # There will be 7 points before the timepoint
+                if baseline_correction: 
+                    # Compute the average of the first 6 points
+                    baseline = np.mean(cut_region_time_series[:3]) # [:6] for the -7 to -1 points
+                    # Subtract the baseline from the time series
+                    cut_region_time_series = cut_region_time_series - baseline
+                cort_selected_time_series.append(cut_region_time_series)
 
-            # Convert the list of selected time series into a matrix
-            # cort_selected_time_series_matrix = np.array(cort_selected_time_series)
-        
-        cort_all_regions_time_series.append(cort_selected_time_series_matrix)
+                # Convert the list of selected time series into a matrix
+                cort_selected_time_series_matrix = np.array(cort_selected_time_series)
+        cort_all_time_series.append(cort_selected_time_series_matrix) # 2 blocks len x x number of events
 
-        cort_all_regions_time_series_matrix = np.array(cort_all_regions_time_series)
+        # In this case below it's also the cortical regions but separated
+        # So we get the signals separately per region
 
-    cort_all_separated_time_series.append(cort_all_regions_time_series_matrix) # 2 blocks len x x number of events
+        cort_all_regions_time_series = []
+
+        # Loop over each cortical region
+        for region_index, region_label in enumerate(cort_roi_labels):
+            print(f'Processing region {region_label}')
+
+            cort_selected_time_series = []
+
+            # Select the time series of the current region
+            region_time_series = cort_roi_time_series[:, region_index]
+
+            # Loop over each timepoint in df_run.volume_stim
+            for timepoint in df_run.volume_stim:
+                cut_region_time_series = region_time_series[timepoint+ts_start:timepoint+ts_end]
+                # There will be 7 points before the timepoint
+                if baseline_correction: 
+                    # Compute the average of the first 6 points
+                    baseline = np.mean(cut_region_time_series[:3]) # [:6] for the -7 to -1 points
+                    # Subtract the baseline from the time series
+                    cut_region_time_series = cut_region_time_series - baseline
+                cort_selected_time_series.append(cut_region_time_series)
+
+                # Convert the list of selected time series into a matrix
+                cort_selected_time_series_matrix = np.array(cort_selected_time_series)
+            
+            cort_all_regions_time_series.append(cort_selected_time_series_matrix)
+
+            cort_all_regions_time_series_matrix = np.array(cort_all_regions_time_series)
+
+        cort_all_separated_time_series.append(cort_all_regions_time_series_matrix) # 2 blocks len x x number of events
 
     
 #%%
@@ -416,6 +442,7 @@ all_time_series_name = os.path.join(derivatives_path,
 
 #%% Subcortical regions signals plot
 
+import scipy.stats as stats
 
 # Create a figure with multiple subplots
 fig, axs = plt.subplots(5, 3, figsize=(15, 10))
@@ -424,8 +451,10 @@ fig, axs = plt.subplots(5, 3, figsize=(15, 10))
 axs = axs.flatten()
 
 # Generate x values starting from -7
-# x_values = np.arange(ts_start, len(all_time_series[0][0]) + ts_start)
 x_values = np.arange(ts_start, ts_end)
+
+# Variable to switch between plotting methods
+plot_method = 'ci'  # Change this to 'lines' to plot individual lines
 
 # Loop over each label in subcort_roi_labels
 for i, (ax, roi_name) in enumerate(zip(axs, subcort_roi_labels)):
@@ -445,9 +474,20 @@ for i, (ax, roi_name) in enumerate(zip(axs, subcort_roi_labels)):
     ax.plot(x_values, average_roi_signal, linewidth=2, color='black', 
             label=f'{roi_name}')
 
-    # Plot all the individual signals with the new x values
-    for signal in stacked_roi_signal:
-        ax.plot(x_values, signal, alpha=0.1)
+    if plot_method == 'ci':
+        # Compute the standard error of the mean
+        sem_roi_signal = stats.sem(stacked_roi_signal, axis=0)
+
+        # Compute the confidence intervals
+        ci_lower_bound = average_roi_signal - 1.96 * sem_roi_signal
+        ci_upper_bound = average_roi_signal + 1.96 * sem_roi_signal
+
+        # Plot the confidence interval
+        ax.fill_between(x_values, ci_lower_bound, ci_upper_bound, color='gray', alpha=0.2)
+    elif plot_method == 'lines':
+        # Plot all the individual signals with the new x values
+        for signal in stacked_roi_signal:
+            ax.plot(x_values, signal, alpha=0.1)
 
     # Set the x-ticks to start from ts_start
     ax.set_xticks(x_values)
@@ -462,12 +502,12 @@ for i, (ax, roi_name) in enumerate(zip(axs, subcort_roi_labels)):
 
     ax.legend(loc='lower right')
 
-    # Put a one general title for the whole figure Subcortical regions
-    fig.suptitle('Subcortical regions')
-    # Put one general label for the y axis
-    ax.set_ylabel('Signal change [%]')
-    # Put one general label for the x axis
-    ax.set_xlabel('Time [s] (0 = stimulus onset)')
+# Put a one general title for the whole figure Subcortical regions
+fig.suptitle('Subcortical regions', fontsize=16)
+fig.text(-0.01, 0.5, 'Signal change [%]', size=16,
+         va='center', rotation='vertical')
+fig.text(0.5, -0.01, 'Time [s] (0 = stimulus onset)', size=16,
+         ha='center')
 
 plt.tight_layout()
 plt.show()
@@ -483,8 +523,7 @@ plt.show()
 fig, ax = plt.subplots(figsize=(5, 3))
 
 # Generate x values starting from -7
-# x_values = np.arange(ts_start, len(cort_all_time_series[0][0]) + ts_start)
-x_values = np.arange(ts_start, ts_end)
+x_values = np.arange(ts_start, len(cort_all_time_series[0][0]) + ts_start)
 
 # Stack the signals along the second dimension
 stacked_cort_signal = np.vstack(cort_all_time_series)
@@ -523,14 +562,21 @@ ax.fill_betweenx(ax.get_ylim(), -3, -1, color='lightgray', alpha=0.5)
 
 plt.tight_layout()
 plt.show()
+
+
+
 # %% Auditory cortical regions
+
+import scipy.stats as stats
 
 # Create a figure with multiple subplots
 fig, axs = plt.subplots(7, 1, figsize=(5, 10))
 
 # Generate x values starting from -7
-# x_values = np.arange(ts_start, len(cort_all_separated_time_series_auditory[0][0]) + ts_start)
 x_values = np.arange(ts_start, ts_end)
+
+# Variable to switch between plotting methods
+plot_method = 'ci'  # Change this to 'lines' to plot individual lines
 
 # Loop over each label in selected_labels
 for i, (ax, roi_name) in enumerate(zip(axs, selected_labels)):
@@ -550,9 +596,20 @@ for i, (ax, roi_name) in enumerate(zip(axs, selected_labels)):
     ax.plot(x_values, average_roi_signal, linewidth=2, color='black', 
             label=f'{roi_name}')
 
-    # Plot all the individual signals with the new x values
-    for signal in stacked_roi_signal:
-        ax.plot(x_values, signal, alpha=0.1)
+    if plot_method == 'ci':
+        # Compute the standard error of the mean
+        sem_roi_signal = stats.sem(stacked_roi_signal, axis=0)
+
+        # Compute the confidence intervals
+        ci_lower_bound = average_roi_signal - 1.96 * sem_roi_signal
+        ci_upper_bound = average_roi_signal + 1.96 * sem_roi_signal
+
+        # Plot the confidence interval
+        ax.fill_between(x_values, ci_lower_bound, ci_upper_bound, color='gray', alpha=0.2)
+    elif plot_method == 'lines':
+        # Plot all the individual signals with the new x values
+        for signal in stacked_roi_signal:
+            ax.plot(x_values, signal, alpha=0.05)
 
     # Set the x-ticks to start from ts_start
     ax.set_xticks(x_values)
@@ -566,11 +623,13 @@ for i, (ax, roi_name) in enumerate(zip(axs, selected_labels)):
     ax.axvline(x=0, color='violet', linestyle='--', linewidth=1)
 
     ax.legend(loc='lower right')
-\
-    # ax.set_title('Average auditory cortical regions')
-    # ax.set_ylabel('Signal change [%]')
-    # ax.set_xlabel('Time [s] (0 = stimulus onset)')
-    # ax.fill_betweenx(ax.get_ylim(), -3, -1, color='lightgray', alpha=0.5)
+
+# Put a one general title for the whole figure Auditory cortical regions
+fig.suptitle('Auditory cortical regions', fontsize=16)
+fig.text(-0.01, 0.5, 'Signal change [%]', size=16,
+            va='center', rotation='vertical')
+fig.text(0.5, -0.01, 'Time [s] (0 = stimulus onset)', size=16,
+            ha='center')
 
 plt.tight_layout()
 plt.show()
@@ -615,8 +674,10 @@ ax.set_yticks([-1, -0.5, 0, 0.5, 1])
 ax.axvline(x=0, color='violet', linestyle='--', linewidth=1)
 
 ax.set_title('Average auditory cortical regions')
+
 ax.set_ylabel('Signal change [%]')
 ax.set_xlabel('Time [s] (0 = stimulus onset)')
+
 ax.fill_betweenx(ax.get_ylim(), -3, -1, color='lightgray', alpha=0.5)
 
 plt.tight_layout()
